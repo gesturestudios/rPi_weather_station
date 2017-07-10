@@ -42,4 +42,6 @@ sudo python Documents/Python_projects/rPi_weather_station/PiWeatherStation.py
 sudo python Documents/Python_projects/rPi_weather_station/NestToMySQL.py - follow the directions to authorize
 
 set up the crontab to run the script every 5 minutes
-
+*/5 * * * * sudo python /home/pi/Documents/Python_projects/rPi_weather_station/InteriorTemps.py
+*/5 * * * * sudo python /home/pi/Documents/Python_projects/rPi_weather_station/PiWeatherStation.py
+*/5 * * * * sudo python /home/pi/Documents/Python_projects/rPi_weather_station/NestToMySQL.py
