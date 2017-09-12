@@ -1,0 +1,255 @@
+# import libraries----------
+library(shiny)
+library(shinydashboard)
+library(plotly)
+library(ggplot2)
+library(RMySQL)
+library(dplyr)
+library(reshape2)
+
+hexcolor <- function(x){
+  if (x>100) {result = "#9E0142"}
+  else if (x>90) {result = "#9E0142"}
+  else if (x>80) {result = "#D62F27"}
+  else if (x>70) {result = "#F46C43"}
+  else if (x>60) {result = "#FCAD60"}
+  else if (x>50) {result = "#FDDF90"}
+  else if (x>40) {result = "#DFF3F8"}
+  else if (x>30) {result = "#ABD9E9"}
+  else if (x>20) {result = "#4575B4"}
+  else {result = "#303694"}
+  return(result)
+}
+
+textcolor <- function(x){
+  if (x>100) {result = "maroon"}
+  else if (x>80) {result = "red"}
+  else if (x>60) {result = "orange"}
+  else if (x>50) {result = "yellow"}
+  else if (x>40) {result = "aqua"}
+  else if (x>30) {result = "light-blue"}
+  else if (x>20) {result = "blue"}
+  else {result = "navy"}
+  return(result)
+}
+
+ui <- dashboardPage(#======================================================================
+  dashboardHeader(title = textOutput("curdate"),titleWidth = 350),
+  dashboardSidebar(#-----------------------------------------------------------------======
+    sidebarMenu(
+      menuItem("Overview",  tabName = "overview",  icon = icon("address-card")),
+      menuItem("Power consumption",  tabName = "power",  icon = icon("bolt"),
+                 menuSubItem("Daily",tabName = 'byDay'),
+                 menuSubItem("Hourly",tabName = 'byHour')
+      ),
+      menuItem("Current temperature",tabName = "temps",  icon = icon("thermometer")),
+      menuItem("Current humidity",   tabName = "humid",  icon = icon("percent")),
+      menuItem("Current weather",    tabName = "weather",icon = icon("cloud")),
+      box(
+        title="Slider for all graphs",background = "blue",width = 13,
+        sliderInput(inputId = "days", 
+                    label = "Choose number of days to plot", 
+                    value = 5, min = 1, max = 30,ticks=FALSE)
+      )
+      
+    )
+  ),
+  dashboardBody(#--------------------------------------------------------------------------
+    tabItems(
+      tabItem(tabName = "overview",#-------------------------------------------------------
+              valueBoxOutput("outside"),
+              valueBoxOutput("inside"),
+              valueBoxOutput("climate_status"),
+              h2("overview of all data")
+              ),
+      tabItem(tabName = "byDay",#----------------------------------------------------------
+              #h2("power consumption by day")
+              plotlyOutput("PGEdailyplot",height = "300px")
+              ),
+      tabItem(tabName = "byHour",#---------------------------------------------------------
+              #h2("power consumption by the hour"),
+              plotlyOutput("PGEplot",height = "300px")
+      ),
+      tabItem(tabName = "temps",#----------------------------------------------------------
+              box(
+                title="Most recent temps",background = "light-blue",width = 4,
+                plotlyOutput("INOUTplot")
+              ),
+              box(
+                title="Temperatures over time- use slider to adjust range",background = "navy",width = 8,
+                plotlyOutput("tempsplot")
+              )
+      ),
+      tabItem(tabName = "humid",#----------------------------------------------------------
+              h2("humidity graph")
+      ),
+      tabItem(tabName = "weather",#--------------------------------------------------------
+              box(
+                title="current conditions",background = "light-blue",width = 4
+                
+              ),
+              box(
+                title="recent observations",background = "navy",width = 8,
+                plotlyOutput("simpletemp",height="200px"),
+                plotlyOutput("simplehumid",height="200px"),
+                plotlyOutput("simplebarometer",height="200px")
+              )
+      )
+    )
+  )
+)
+# -----------------------------------------------------------------------------------------
+server <- function(input, output) {#=======================================================
+  # connect to MySQL db and retrieve data--------------------------------------------------
+  mydb = dbConnect(MySQL(), user='arduinouser', password='arduino', dbname='arduino_data', host='127.0.0.1')
+  intemps <- dbGetQuery(mydb, "SELECT * FROM `INDOOR_TEMPS` WHERE `READ_TIME` >= now() - INTERVAL 30 DAY ORDER BY `READ_TIME` DESC;")
+  outdat  <- dbGetQuery(mydb, "SELECT * FROM `PiStation` WHERE `READ_TIME` >= now() - INTERVAL 30 DAY ORDER BY `READ_TIME` DESC;")
+  nestdat <- dbGetQuery(mydb, "SELECT * FROM `NEST_DATA` WHERE `datetime` >= now() - INTERVAL 30 DAY ORDER BY `datetime` DESC;")
+  df      <- dbGetQuery(mydb, "SELECT * FROM `PGE_usage` WHERE `usage_date` > '2017-04-11';")
+  
+  intemps$stpt = as.POSIXct(strptime(intemps$READ_TIME, format="%Y-%m-%d %H:%M:%S"))
+  outdat$stpt = as.POSIXct(strptime(outdat$READ_TIME, format="%Y-%m-%d %H:%M:%S"))
+  nestdat$stpt = as.POSIXct(strptime(nestdat$datetime, format="%Y-%m-%d %H:%M:%S"))
+  df$stpt = as.Date(df$usage_date, format="%Y-%m-%d")
+  
+  # renders for header --------------------------------------------------------------------
+  output$curdate <- renderText({format(Sys.time(), "%A %B %d, %I:%M %p")  })
+  # renders for summary page---------------------------------------------------------------
+  output$outside    <- renderValueBox({
+    valueBox(
+      icon("thermometer-4"),
+      value=outdat$OUTSIDE_TEMP[1],
+      subtitle="outside",
+      color=textcolor(outdat$OUTSIDE_TEMP[1])
+    )
+  })
+  output$inside    <- renderValueBox({
+    valueBox(
+      icon("thermometer-4"),
+      value=nestdat$NEST_TEMP[1],
+      subtitle="inside",
+      color=textcolor(nestdat$NEST_TEMP[1])
+    )
+  })
+  output$climate_status    <- renderValueBox({
+    if (nestdat$NEST_MODE[1] == "eco"){
+      mode_icon = "leaf"
+      mode_color="green"}
+    else if ((nestdat$NEST_MODE[1] == "heat")){
+      mode_icon = "fire"
+      mode_color="red"}
+    else if ((nestdat$NEST_MODE[1] == "cool")){
+      mode_icon = "snowflake-o"
+      mode_color="light-blue"}
+    else if ((nestdat$NEST_MODE[1] == "off")){
+      mode_icon = "power-off"
+      mode_color="purple"}
+    else {
+      mode_icon = "exclamation-sign"
+      mode_color="orange"}
+    valueBox(
+      subtitle = "thermostat set to",
+      value=nestdat$NEST_MODE[1],
+      icon(mode_icon),
+      color=mode_color
+    )
+  })
+  
+  # renders for hourly energy usage page --------------------------------------------------
+  melted_frame = melt(df,id=c("stpt","usage_date"))
+  melted_frame = melted_frame[order(melted_frame[,1],melted_frame[,3]),]
+  melted_frame$hr = as.integer(substr(melted_frame$variable,2,3))
+  hourly_means = summarize(group_by(melted_frame,hr),
+                           av_kwh = mean(value),
+                           sd_kwh = sd(value))
+
+  output$PGEplot <- renderPlotly({
+    recent_means = summarize(group_by(subset(melted_frame,stpt>=(Sys.Date()-(input$days))),hr),
+                             av_kwh = mean(value),
+                             sd_kwh = sd(value))
+    p = ggplot()+ 
+      geom_bar(data=hourly_means, aes(y=av_kwh,x=hr),stat="identity")+
+      geom_point(data = subset(melted_frame,stpt>=(Sys.Date()-(input$days))), 
+                 aes(x = hr, y = value, color=value,text = paste("date",usage_date)),show.legend=FALSE)+ 
+      scale_colour_gradientn(colours = topo.colors(10))+
+      geom_line(data=recent_means, aes(y=av_kwh,x=hr),color="orange")+
+      labs(x="hour (24 hour cycle)",y="kWh used")+
+      theme_dark()
+    p})
+  
+  # renders for daily energy usage page ---------------------------------------------------
+  df$tot_kWh = rowSums(df[,2:25])
+  mean_daily_kwh = mean(df$tot_kWh)
+  df$meankwh = mean_daily_kwh
+  
+  output$PGEdailyplot <- renderPlotly({
+    pge = subset(df,stpt>=(Sys.Date()-(input$days)),select = c(stpt,tot_kWh,meankwh))
+
+    pg = ggplot(data=pge)+ 
+      #geom_bar(aes(y=tot_kWh,x=stpt),stat="identity")+
+      geom_area(aes(y=tot_kWh,x=stpt),color="orange")+
+      #scale_colour_gradientn(colours = topo.colors(10))+
+      geom_line(aes(y=meankwh,x=stpt),color="white")+
+      labs(x="day",y="kWh used")+
+      theme_dark()
+    pg})
+  # renders for temperature page ----------------------------------------------------------
+  curtemps = intemps[1,c(1:3)]
+  curtemps$PiStation = outdat$OUTSIDE_TEMP[1]
+  curtemps$Nest = nestdat$NEST_TEMP[1]
+  curtemps$loc = "Inside"
+  temps = melt(curtemps,id="loc")
+  temps$loc[temps$variable=="PiStation"] = "Outside"
+  temps$fillcolors = lapply(temps$value,hexcolor)
+
+  tbars <- ggplot()+
+    geom_bar(data=temps,aes(fill=variable,x=variable,y=value),position="dodge",stat="identity",show.legend=FALSE)+
+    facet_wrap(~loc, scales = "free_x",shrink = TRUE)+
+    scale_y_discrete(name="Temperature (F)")+
+    theme_dark()+  
+    scale_fill_manual(values=temps$fillcolors)+
+    theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank(),legend.position="none")
+  output$INOUTplot <- renderPlotly({
+    tbars})
+  
+  intemps_2_melt = intemps[,c(1,2,3,5)]
+  melted_intemps = melt(intemps_2_melt,id=c("stpt"))
+  nestdat_2_melt = nestdat[,c(2,11)]
+  melted_nest    = melt(nestdat_2_melt,id=c("stpt"))
+  outdat_2_melt  = outdat[,c(1,5)]
+  melted_outdat  = melt(outdat_2_melt,id=c("stpt"))
+  tempplot_data = rbind(melted_intemps,melted_nest,melted_outdat)
+  # render plot:
+  output$tempsplot <- renderPlotly({
+    tempplot = ggplot(data = subset(tempplot_data,stpt>=(Sys.time()-(input$days*24*60*60))))+
+      geom_line(aes(x=stpt,y=value,color=variable,text=stpt))+
+      theme_dark()+
+      theme(axis.title.x=element_blank(),axis.title.y=element_blank(),legend.position="none")
+  })
+  # renders for humidity page -------------------------------------------------------------
+  # renders for climate page --------------------------------------------------------------
+  output$simpletemp <- renderPlotly({
+    stemp = ggplot(data = subset(outdat,stpt>=(Sys.time()-(input$days*24*60*60))))+
+      geom_line(aes(x=stpt,y=OUTSIDE_TEMP,color="maroon",text=stpt))+
+      theme_dark()+labs(y="temp (F)")+scale_color_manual(values = c("#D62F27"))+
+      theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank(),
+            legend.position="none",plot.margin = unit(c(0,0.2,0,1), "cm"))
+  })
+  output$simplehumid <- renderPlotly({
+    shumid = ggplot(data = subset(outdat,stpt>=(Sys.time()-(input$days*24*60*60)) & OUTSIDE_HUMIDITY>10 & OUTSIDE_HUMIDITY<100))+
+      geom_line(aes(x=stpt,y=OUTSIDE_HUMIDITY,color="green",text=stpt))+
+      theme_dark()+labs(y="humidity (%)")+scale_color_manual(values = c("#D9EE8A"))+
+      theme(axis.title.x=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank(),
+            legend.position="none",plot.margin = unit(c(0,0.2,0,1), "cm"))
+  })
+  output$simplebarometer <- renderPlotly({
+    sbarom = ggplot(data = subset(outdat,stpt>=(Sys.time()-(input$days*24*60*60))))+
+      geom_line(aes(x=stpt,y=OUTSIDE_PRESSURE/6894.76,color="fuchia",text=stpt))+
+      theme_dark()+labs(y="pressure (psi)")+scale_color_manual(values = c("#C2A4CF"))+
+      theme(axis.title.x=element_blank(),axis.ticks.x=element_blank(),axis.text.y=element_text(angle=90),
+            legend.position="none",plot.margin = unit(c(0,0.2,0,1), "cm"))
+  })
+  dbDisconnect(mydb)
+}
+
+shinyApp(ui, server)#======================================================================
