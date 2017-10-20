@@ -60,7 +60,11 @@ ui <- dashboardPage(#===========================================================
               valueBoxOutput("outside"),
               valueBoxOutput("inside"),
               valueBoxOutput("climate_status"),
-              h2("overview of all data")
+              tags$iframe(
+                seamless = "seamless", 
+                src = "https://forecast.io/embed/#lat=45.4813&lon=-122.8490&name=our backyard", 
+                height = 250, width = 600
+                )
               ),
       tabItem(tabName = "byDay",#----------------------------------------------------------
               #h2("power consumption by day")
