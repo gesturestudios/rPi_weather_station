@@ -26,8 +26,8 @@ for sensor in W1ThermSensor.get_available_sensors():
 
 # make a database connection
 conxtn = MySQLdb.connect(host = "192.168.1.134",
-					 user = "raspberry",
-					 passwd = "raspberryPi",
+					 user = "[user]",
+					 passwd = "[pwd]",
 					 db = "arduino_data")
 
 # create cursor object to execute queries
