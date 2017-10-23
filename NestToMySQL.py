@@ -4,8 +4,8 @@ import nest
 import MySQLdb
 import time
 
-client_id = '82b1a8b4-5dee-4bee-9466-fd9ac8123c08'
-client_secret = 'czpsOm7KVk1elMDoxdfvUleJC'
+client_id = '[client id]'
+client_secret = '[clinet secret]'
 
 access_token_cache_file = 'nest.json'
 napi = nest.Nest(client_id=client_id, client_secret=client_secret, access_token_cache_file=access_token_cache_file)
@@ -42,8 +42,8 @@ print nest_away_status
 
 # make a database connection
 conxtn = MySQLdb.connect(host = "192.168.1.134",
-					 user = "raspberry",
-					 passwd = "raspberryPi",
+					 user = "[user]",
+					 passwd = "[pwd]",
 					 db = "arduino_data")
 					 
 # create cursor object to execute queries
