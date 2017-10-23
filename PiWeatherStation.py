@@ -24,8 +24,8 @@ out_pres = BMP_sensor.read_pressure()
 
 # make a database connection
 conxtn = MySQLdb.connect(host = "192.168.1.134",
-					 user = "raspberry",
-					 passwd = "raspberryPi",
+					 user = "[user]",
+					 passwd = "[pwd]",
 					 db = "arduino_data")
 
 # create cursor object to execute queries
