@@ -6,6 +6,7 @@ library(ggplot2)
 library(RMySQL)
 library(dplyr)
 library(reshape2)
+library(gsheet)
 
 hexcolor <- function(x){
   if (x>100) {result = "#9E0142"}
@@ -42,9 +43,10 @@ ui <- dashboardPage(#===========================================================
                  menuSubItem("Daily",tabName = 'byDay'),
                  menuSubItem("Hourly",tabName = 'byHour')
       ),
+      menuItem("Utility bills",   tabName = "bills",  icon = icon("dollar")),
       menuItem("Current temperature",tabName = "temps",  icon = icon("thermometer")),
-      menuItem("Current humidity",   tabName = "humid",  icon = icon("percent")),
       menuItem("Current weather",    tabName = "weather",icon = icon("cloud")),
+      menuItem("Darksky map",    tabName = "weathermap", icon = icon("map")),
       box(
         title="Slider for all graphs",background = "blue",width = 13,
         sliderInput(inputId = "days", 
@@ -64,7 +66,21 @@ ui <- dashboardPage(#===========================================================
                 seamless = "seamless", 
                 src = "https://forecast.io/embed/#lat=45.4813&lon=-122.8490&name=our backyard", 
                 height = 250, width = 600
-                )
+              ),
+              box(
+                background = "navy",width = "450px", height = "170px",
+                img(src='moon-150x150.png'),
+                img(src='daylight-300x150.png'),
+                img(src="http://www.hamqsl.com/solar101vhfpic.php")
+              )
+              
+              # tags$iframe(
+              #   seamless = "seamless", 
+              #   src = "moon-150x150.png", 
+              #   height = 150, width = 150
+              #   )
+              #,
+              #img(src='moon-210x210.png', align = 'top')
               ),
       tabItem(tabName = "byDay",#----------------------------------------------------------
               #h2("power consumption by day")
@@ -73,6 +89,26 @@ ui <- dashboardPage(#===========================================================
       tabItem(tabName = "byHour",#---------------------------------------------------------
               #h2("power consumption by the hour"),
               plotlyOutput("PGEplot",height = "300px")
+      ),
+      tabItem(tabName = "bills",#----------------------------------------------------------
+              box(
+                title="Summary of bills",background = "light-blue",width = 3,
+                uiOutput("choose_billers"),
+                uiOutput("choose_years"),
+                box(
+                  title="Upcoming bills",background = "red",width = 2.75,
+                  htmlOutput("upcoming_bills")
+                ),
+                box(
+                  title="Recently paid",background = "green",width = 2.75,
+                  htmlOutput("paid_bills")
+                )
+                
+              ),
+              box(
+                title = "Plot of selected provider bills over selected year range",background = "navy",width = 9,
+                plotlyOutput("billplot")
+              )
       ),
       tabItem(tabName = "temps",#----------------------------------------------------------
               box(
@@ -83,9 +119,6 @@ ui <- dashboardPage(#===========================================================
                 title="Temperatures over time- use slider to adjust range",background = "navy",width = 8,
                 plotlyOutput("tempsplot")
               )
-      ),
-      tabItem(tabName = "humid",#----------------------------------------------------------
-              h2("humidity graph")
       ),
       tabItem(tabName = "weather",#--------------------------------------------------------
               box(
@@ -98,14 +131,24 @@ ui <- dashboardPage(#===========================================================
                 plotlyOutput("simplehumid",height="200px"),
                 plotlyOutput("simplebarometer",height="200px")
               )
+      ),
+      tabItem(tabName = "weathermap",#--------------------------------------------------------
+              box(
+                title="forecast map from Dark Sky",background = "light-blue",width = 4
+                
+              ),
+              tabPanel("Map",
+                       br(),
+                       htmlOutput("darkmapframe")
+              )
       )
     )
   )
 )
 # -----------------------------------------------------------------------------------------
 server <- function(input, output) {#=======================================================
-  # connect to MySQL db and retrieve data--------------------------------------------------
-  mydb = dbConnect(MySQL(), user='[user]', password='[pwd]', dbname='arduino_data', host='127.0.0.1')
+  # connect to data sources and retrieve data--------------------------------------------------
+  mydb = dbConnect(MySQL(), user='arduinouser', password='arduino', dbname='arduino_data', host='127.0.0.1')
   intemps <- dbGetQuery(mydb, "SELECT * FROM `INDOOR_TEMPS` WHERE `READ_TIME` >= now() - INTERVAL 30 DAY ORDER BY `READ_TIME` DESC;")
   outdat  <- dbGetQuery(mydb, "SELECT * FROM `PiStation` WHERE `READ_TIME` >= now() - INTERVAL 30 DAY ORDER BY `READ_TIME` DESC;")
   nestdat <- dbGetQuery(mydb, "SELECT * FROM `NEST_DATA` WHERE `datetime` >= now() - INTERVAL 30 DAY ORDER BY `datetime` DESC;")
@@ -115,6 +158,24 @@ server <- function(input, output) {#============================================
   outdat$stpt = as.POSIXct(strptime(outdat$READ_TIME, format="%Y-%m-%d %H:%M:%S"))
   nestdat$stpt = as.POSIXct(strptime(nestdat$datetime, format="%Y-%m-%d %H:%M:%S"))
   df$stpt = as.Date(df$usage_date, format="%Y-%m-%d")
+  
+  bills = gsheet2tbl('https://docs.google.com/spreadsheets/d/1omTXqs6xDdzzUHfDOYOi5picPXoUVDkpcY7-IH9QDFA/edit?usp=sharing')
+  bills$dateob = as.Date(bills$DUE_DATE,"%m/%d/%Y")
+  nulldates = bills$DUE_DATE[is.na(bills$dateob)]
+  bills$dateob[is.na(bills$dateob)] = as.Date(nulldates,"%b %d,%Y")
+  bills$month = as.numeric(format(bills$dateob,'%m'))
+  bills$year = as.numeric(format(bills$dateob,'%Y'))
+  bills$month_abb = month.abb[bills$month]
+  bills$month_abb <- factor(bills$month_abb,levels=month.abb)
+  recent_bills = summarize(group_by(bills,SOURCE),
+                           lastbills = max(dateob))
+  recent_bills$status = recent_bills$lastbills - Sys.Date()
+  upcoming = subset(recent_bills,lastbills>=Sys.Date())
+  if (nrow(upcoming)>=1){
+    upcoming$str = paste(upcoming$SOURCE," due in ",upcoming$status," days on ",format(upcoming$lastbills,"%b %d"))}
+  paid = subset(recent_bills,lastbills<Sys.Date())
+  if (nrow(paid)>=1){
+    paid$str = paste(paid$SOURCE," last paid on ",format(paid$lastbills,"%b %d"))}
   
   # renders for header --------------------------------------------------------------------
   output$curdate <- renderText({format(Sys.time(), "%A %B %d, %I:%M %p")  })
@@ -197,6 +258,37 @@ server <- function(input, output) {#============================================
       labs(x="day",y="kWh used")+
       theme_dark()
     pg})
+  # renders for bills page -------------------------------------------------------------
+  output$choose_billers <- renderUI({
+    billers = unique(bills$SOURCE)
+    checkboxGroupInput(inputId = "billervariable",label = "Choose bills to display",
+                       choices = billers,selected = billers)
+  })
+  output$choose_years <- renderUI({
+    yearoptions = unique(bills$year)
+    checkboxGroupInput(inputId = "yearvariable",label = "Choose years to display",
+                       choices = yearoptions,selected = yearoptions)
+  })
+  output$upcoming_bills <- renderUI({HTML(paste(upcoming$str,sep='<br/>'))})
+  output$paid_bills <- renderUI({HTML(paste(paid$str,sep='<br/>'))})
+  output$billplot <- renderPlotly({
+    bills2plot = subset(bills, SOURCE %in% input$billervariable & year %in% input$yearvariable,
+                        c(SOURCE,year,month_abb,DUE,dateob))
+    bills2plot$SOURCE <- factor(bills2plot$SOURCE)
+    bills2plot$year <- factor((bills2plot$year))
+    
+    bills2plot.all <- rbind(bills2plot, cbind(expand.grid(
+      SOURCE=levels(bills2plot$SOURCE), 
+      month_abb=levels(bills2plot$month_abb),
+      year = levels(bills2plot$year)), DUE=NA, dateob=NA))
+    
+    billplot = ggplot(bills2plot.all,aes(SOURCE,DUE))+
+      geom_bar(aes(fill=SOURCE,text=dateob),position="dodge",stat="identity")+
+      theme(axis.text.x=element_blank(),axis.title.x=element_blank(),axis.ticks.x=element_blank())+
+      facet_grid(year~month_abb)+labs(y="Bill amount ($)", fill="Provider")
+      
+    billplot})
+  
   # renders for temperature page ----------------------------------------------------------
   curtemps = intemps[1,c(1:3)]
   curtemps$PiStation = outdat$OUTSIDE_TEMP[1]
@@ -230,7 +322,8 @@ server <- function(input, output) {#============================================
       theme_dark()+
       theme(axis.title.x=element_blank(),axis.title.y=element_blank(),legend.position="none")
   })
-  # renders for humidity page -------------------------------------------------------------
+
+  
   # renders for climate page --------------------------------------------------------------
   output$simpletemp <- renderPlotly({
     stemp = ggplot(data = subset(outdat,stpt>=(Sys.time()-(input$days*24*60*60))))+
@@ -254,6 +347,29 @@ server <- function(input, output) {#============================================
             legend.position="none",plot.margin = unit(c(0,0.2,0,1), "cm"))
   })
   dbDisconnect(mydb)
+  # render map from Dark Sky --------------------------------------------------------------
+  output$darkmapframe <- renderUI({
+    HTML('
+    <style>
+      .embed-container {
+        position: relative;
+        padding-bottom: 80%;
+        height: 0;
+        max-width: 100%;
+      }
+    </style>
+    <iframe
+        width="1500"
+        height="700"
+        frameborder="0"
+        scrolling="no"
+        marginheight="0"
+        marginwidth="0"
+        title="provPrepTest"
+        src="https://darksky.net/map-embed/@temperature,38.411,-110.391,4.js?embed=true&timeControl=false&fieldControl=true&defaultField=precipitation_rate&defaultUnits=_inph">
+    </iframe>
+    ')
+  })
 }
 
 shinyApp(ui, server)#======================================================================
