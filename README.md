@@ -37,11 +37,17 @@ import MySQLdb
 import Adafruit_DHT
 
 then exit python and run the scripts from command line:
+
 sudo python Documents/Python_projects/rPi_weather_station/InteriorTemps.py
 sudo python Documents/Python_projects/rPi_weather_station/PiWeatherStation.py
 sudo python Documents/Python_projects/rPi_weather_station/NestToMySQL.py - follow the directions to authorize
 
 set up the crontab to run the script every 5 minutes
+
 */5 * * * * sudo python /home/pi/Documents/Python_projects/rPi_weather_station/InteriorTemps.py
 */5 * * * * sudo python /home/pi/Documents/Python_projects/rPi_weather_station/PiWeatherStation.py
 */5 * * * * sudo python /home/pi/Documents/Python_projects/rPi_weather_station/NestToMySQL.py
+
+### Dashboard setup ###
+The visualization for this and all data comes from a shiny dashboard (Home_shiny_dashboard.R).  The script has moved beyond just the data pulled from the sql database to include some google sheet data and other imported things.  On the to-do list is to reduce it back to a script only relating to the weather station, and make a separate version for the complete dashboard...
+
