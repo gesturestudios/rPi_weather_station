@@ -43,7 +43,10 @@ ui <- dashboardPage(#===========================================================
                  menuSubItem("Daily",tabName = 'byDay'),
                  menuSubItem("Hourly",tabName = 'byHour')
       ),
-      menuItem("Utility bills",   tabName = "bills",  icon = icon("dollar")),
+      menuItem("Bills",   tabName = "bills",  icon = icon("dollar"),
+                 menuSubItem("Utility bills",tabName = "utility"),
+                 menuSubItem("Home improvement",tabName = "homeimp")
+      ),
       menuItem("Current temperature",tabName = "temps",  icon = icon("thermometer")),
       menuItem("Current weather",    tabName = "weather",icon = icon("cloud")),
       menuItem("Darksky map",    tabName = "weathermap", icon = icon("map")),
@@ -90,7 +93,7 @@ ui <- dashboardPage(#===========================================================
               #h2("power consumption by the hour"),
               plotlyOutput("PGEplot",height = "300px")
       ),
-      tabItem(tabName = "bills",#----------------------------------------------------------
+      tabItem(tabName = "utility",#----------------------------------------------------------
               box(
                 title="Summary of bills",background = "light-blue",width = 3,
                 uiOutput("choose_billers"),
@@ -110,6 +113,16 @@ ui <- dashboardPage(#===========================================================
                 plotlyOutput("billplot")
               )
       ),
+      tabItem(tabName = "homeimp",#----------------------------------------------------------
+              box(
+                title="Choose years to summarize:",background = "light-blue",width = 3,
+                uiOutput("hd_years")
+              ),
+              box(
+                title = "Total spending at Home Depot over selected year range",background = "navy",width = 9,
+                plotlyOutput("hdspendingplot")
+              )
+      ),
       tabItem(tabName = "temps",#----------------------------------------------------------
               box(
                 title="Most recent temps",background = "light-blue",width = 4,
@@ -117,7 +130,8 @@ ui <- dashboardPage(#===========================================================
               ),
               box(
                 title="Temperatures over time- use slider to adjust range",background = "navy",width = 8,
-                plotlyOutput("tempsplot")
+                plotlyOutput("tempsplot",height = 600),
+                plotlyOutput("furnaceplot", height = 100)
               )
       ),
       tabItem(tabName = "weather",#--------------------------------------------------------
@@ -148,7 +162,8 @@ ui <- dashboardPage(#===========================================================
 # -----------------------------------------------------------------------------------------
 server <- function(input, output) {#=======================================================
   # connect to data sources and retrieve data--------------------------------------------------
-  mydb = dbConnect(MySQL(), user=['user'], password=['pwd'], dbname='arduino_data', host='127.0.0.1')
+  # home server connection
+  mydb = dbConnect(MySQL(), user='arduinouser', password='arduino', dbname='arduino_data', host='127.0.0.1')
   intemps <- dbGetQuery(mydb, "SELECT * FROM `INDOOR_TEMPS` WHERE `READ_TIME` >= now() - INTERVAL 30 DAY ORDER BY `READ_TIME` DESC;")
   outdat  <- dbGetQuery(mydb, "SELECT * FROM `PiStation` WHERE `READ_TIME` >= now() - INTERVAL 30 DAY ORDER BY `READ_TIME` DESC;")
   nestdat <- dbGetQuery(mydb, "SELECT * FROM `NEST_DATA` WHERE `datetime` >= now() - INTERVAL 30 DAY ORDER BY `datetime` DESC;")
@@ -159,6 +174,7 @@ server <- function(input, output) {#============================================
   nestdat$stpt = as.POSIXct(strptime(nestdat$datetime, format="%Y-%m-%d %H:%M:%S"))
   df$stpt = as.Date(df$usage_date, format="%Y-%m-%d")
   
+  # utility bill data from Google Sheet
   bills = gsheet2tbl('https://docs.google.com/spreadsheets/d/1omTXqs6xDdzzUHfDOYOi5picPXoUVDkpcY7-IH9QDFA/edit?usp=sharing')
   bills$dateob = as.Date(bills$DUE_DATE,"%m/%d/%Y")
   nulldates = bills$DUE_DATE[is.na(bills$dateob)]
@@ -176,6 +192,21 @@ server <- function(input, output) {#============================================
   paid = subset(recent_bills,lastbills<Sys.Date())
   if (nrow(paid)>=1){
     paid$str = paste(paid$SOURCE," last paid on ",format(paid$lastbills,"%b %d"))}
+  
+  # Home Depot spending from Google Sheet
+  homedepotsheet = gsheet2tbl("https://docs.google.com/spreadsheets/d/1OB0TD1gkaYtPGSwrTMZzo_EsymR9cENYbgubf-RwBzU/edit?usp=sharing")
+  hddf = data.frame(Datestr = as.Date(character()),
+                  receipt_amount = numeric(),
+                  stringsAsFactors = FALSE)
+  for (i in 1:nrow(homedepotsheet)){
+    test = sub(".*USD\\$ ","",homedepotsheet[i,4])
+    hddf[i,2] = as.numeric(sub(" .*","",test))
+    hddf[i,1] =as.Date(sub(" at .*","",homedepotsheet[i,1]),format = "%B %d, %Y")
+  }
+  hddf <- hddf[order(hddf$Datestr),]
+  hddf$year = as.numeric(format(hddf$Datestr,'%Y'))
+  hddf$CommonDate <- as.Date(paste0("2000-",format(hddf$Datestr, "%j")), "%Y-%j")
+  hddf$cumsum <- do.call(c, tapply(hddf$receipt_amount, hddf$year, FUN=cumsum))
   
   # renders for header --------------------------------------------------------------------
   output$curdate <- renderText({format(Sys.time(), "%A %B %d, %I:%M %p")  })
@@ -258,7 +289,7 @@ server <- function(input, output) {#============================================
       labs(x="day",y="kWh used")+
       theme_dark()
     pg})
-  # renders for bills page -------------------------------------------------------------
+  # renders for utility page -------------------------------------------------------------
   output$choose_billers <- renderUI({
     billers = unique(bills$SOURCE)
     checkboxGroupInput(inputId = "billervariable",label = "Choose bills to display",
@@ -269,8 +300,8 @@ server <- function(input, output) {#============================================
     checkboxGroupInput(inputId = "yearvariable",label = "Choose years to display",
                        choices = yearoptions,selected = yearoptions)
   })
-  output$upcoming_bills <- renderUI({HTML(paste(upcoming$str,sep='<br/>'))})
-  output$paid_bills <- renderUI({HTML(paste(paid$str,sep='<br/>'))})
+  output$upcoming_bills <- renderUI({HTML(paste0(upcoming$str,sep='<br/>'))})
+  output$paid_bills <- renderUI({HTML(paste0(as.list(paid$str),sep='<br/>'))})
   output$billplot <- renderPlotly({
     bills2plot = subset(bills, SOURCE %in% input$billervariable & year %in% input$yearvariable,
                         c(SOURCE,year,month_abb,DUE,dateob))
@@ -289,6 +320,22 @@ server <- function(input, output) {#============================================
       
     billplot})
   
+  # renders for home depot page---------------------------------------------------------
+  output$hd_years <- renderUI({
+    hdyearoptions = unique(hddf$year)
+    checkboxGroupInput(inputId = "hdyear",label = "Choose years to display",
+                       choices = hdyearoptions,selected = hdyearoptions)
+  })
+  output$hdspendingplot <- renderPlotly({
+    hdplotdata = subset(hddf, year %in% input$hdyear)
+    hdplot = ggplot(hdplotdata,aes(x=CommonDate,y=cumsum)) + 
+      geom_area(fill='red',alpha=0.5) + 
+      geom_point(aes(size=receipt_amount,text=Datestr)) +
+      facet_grid(year~.)+
+      labs(y="Total spending ($)",x="")+
+      scale_x_date(labels = function(x) format(x, "%d-%b")) +    
+      theme(legend.position = "none")
+    hdplot})
   # renders for temperature page ----------------------------------------------------------
   curtemps = intemps[1,c(1:3)]
   curtemps$PiStation = outdat$OUTSIDE_TEMP[1]
@@ -310,7 +357,7 @@ server <- function(input, output) {#============================================
   
   intemps_2_melt = intemps[,c(1,2,3,5)]
   melted_intemps = melt(intemps_2_melt,id=c("stpt"))
-  nestdat_2_melt = nestdat[,c(2,11)]
+  nestdat_2_melt = nestdat[,c(2,12)]
   melted_nest    = melt(nestdat_2_melt,id=c("stpt"))
   outdat_2_melt  = outdat[,c(1,5)]
   melted_outdat  = melt(outdat_2_melt,id=c("stpt"))
@@ -321,6 +368,29 @@ server <- function(input, output) {#============================================
       geom_line(aes(x=stpt,y=value,color=variable,text=stpt))+
       theme_dark()+
       theme(axis.title.x=element_blank(),axis.title.y=element_blank(),legend.position="none")
+  })
+  output$furnaceplot = renderPlotly({
+    nestsubset = subset(nestdat,stpt>=(Sys.time()-(input$days*24*60*60)))
+    for (i in 1:nrow(nestsubset)) {
+      if(nestsubset$NEST_AWAY[i] =="home") {nestsubset$HOME[i] = 1} else {nestsubset$HOME[i] = 0}
+      if(nestsubset$NEST_MODE[i] =="heat") {nestsubset$HEAT[i] = 1} else {nestsubset$HEAT[i] = 0}
+      if(nestsubset$NEST_MODE[i] =="eco") {nestsubset$ECO[i] = 1} else {nestsubset$ECO[i] = 0}
+      if(nestsubset$NEST_MODE[i] =="cool") {nestsubset$COOL[i] = 1} else {nestsubset$COOL[i] = 0}
+      if(nestsubset$HVAC_STATE[i] =="heating") {nestsubset$HON[i] = 1} else {nestsubset$HON[i] = 0}
+      if(nestsubset$HVAC_STATE[i] =="cooling") {nestsubset$CON[i] = 1} else {nestsubset$CON[i] = 0}
+    }
+    furnace_plot = ggplot(data = nestsubset) + 
+      geom_area(aes(stpt,HEAT),fill="darkred", linetype = 0)+
+      geom_area(aes(stpt,ECO),fill="forestgreen", linetype = 0)+
+      geom_area(aes(stpt,COOL),fill="royalblue4", linetype = 0)+
+      geom_area(aes(stpt,HON),fill="red", linetype = 0)+
+      geom_area(aes(stpt,CON),fill="royalblue", linetype = 0)+
+      geom_area(aes(stpt,NEST_FAN),fill="white", linetype = 0)+
+      theme_dark() + 
+      theme(axis.title.x=element_blank(),axis.title.y=element_text(color="white"),
+            axis.text.y = element_blank(), axis.ticks.y = element_blank(), legend.position="right",
+            panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+    furnace_plot
   })
 
   
@@ -360,7 +430,7 @@ server <- function(input, output) {#============================================
     </style>
     <iframe
         width="1500"
-        height="700"
+        height="900"
         frameborder="0"
         scrolling="no"
         marginheight="0"
