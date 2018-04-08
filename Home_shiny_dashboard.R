@@ -163,7 +163,7 @@ ui <- dashboardPage(#===========================================================
 server <- function(input, output) {#=======================================================
   # connect to data sources and retrieve data--------------------------------------------------
   # home server connection
-  mydb = dbConnect(MySQL(), user='arduinouser', password='arduino', dbname='arduino_data', host='127.0.0.1')
+  mydb = dbConnect(MySQL(), user=[username], password=[password], dbname='arduino_data', host='127.0.0.1')
   intemps <- dbGetQuery(mydb, "SELECT * FROM `INDOOR_TEMPS` WHERE `READ_TIME` >= now() - INTERVAL 30 DAY ORDER BY `READ_TIME` DESC;")
   outdat  <- dbGetQuery(mydb, "SELECT * FROM `PiStation` WHERE `READ_TIME` >= now() - INTERVAL 30 DAY ORDER BY `READ_TIME` DESC;")
   nestdat <- dbGetQuery(mydb, "SELECT * FROM `NEST_DATA` WHERE `datetime` >= now() - INTERVAL 30 DAY ORDER BY `datetime` DESC;")
