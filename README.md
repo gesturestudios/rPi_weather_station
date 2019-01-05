@@ -10,8 +10,9 @@ sudo apt-get upgrage
 sudp apt-get install python-pip python-dev libmysqlclient-dev
 
 now that all files are on the pi, we can install the necessary python libraries:
-sudo apt-get install python-mysqldb
+sudo apt-get install python3-mysqldb
 sudo pip install w1thermsensor python-nest
+sudo apt-get install python3-w1thermsensor
 
 change directory into the downloaded git repository and unzip the .tar.gz files:
 cd Documents/Python_projects/rPi_weather_station
