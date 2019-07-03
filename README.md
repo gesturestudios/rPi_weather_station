@@ -7,7 +7,8 @@ git clone https://github.com/gesturestudios/rPi_weather_station
 make sure python pip and dev are up to date:
 sudo apt-get update
 sudo apt-get upgrage
-sudp apt-get install python-pip python-dev libmysqlclient-dev
+sudp apt-get install python-pip python-dev libmariadbclient-dev
+# used to use libmysqlclient-dev, but package is deprecated, replaced by libmariadbclient-dev
 
 now that all files are on the pi, we can install the necessary python libraries:
 sudo apt-get install python3-mysqldb
