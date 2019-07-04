@@ -1,6 +1,15 @@
 # rPi_weather_station
 A few of these scripts are run from a raspberry pi.  I've had issues with SD card corruption, so I'm documenting here how to re-load the necessary libraries.
 
+# setup ssh and vnc on the pi:
+You can do this either after install of the python libraries and weather station stuff, or before, then install via vnc or ssh.
+Following steps from here: http://mitchtech.net/vnc-setup-on-raspberry-pi-from-ubuntu/
+ssh pi@[pi ip address]  (need to have ssh already enabled on the pi- do this from setup)
+from ssh/pi command line, run:
+sudo apt-get install tightvncserver
+vncserver :1 -geometry 1366x768 -depth 16 -pixelformat rgb565
+
+# install the weather station stuff:
 download this repository with git:
 git clone https://github.com/gesturestudios/rPi_weather_station
 
