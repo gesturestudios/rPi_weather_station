@@ -7,7 +7,7 @@ Following steps from here: http://mitchtech.net/vnc-setup-on-raspberry-pi-from-u
 ssh pi@[pi ip address]  (need to have ssh already enabled on the pi- do this from setup)\
 from ssh/pi command line, run:\
 sudo apt-get install tightvncserver\
-vncserver :1 -geometry 1366x768 -depth 16 -pixelformat rgb565
+vncserver :1 -geometry 1200x650 -depth 16 -pixelformat rgb565
 
 # install the weather station stuff:
 download this repository with git:\
