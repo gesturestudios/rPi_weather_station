@@ -23,7 +23,7 @@ out_pres = BMP_sensor.read_pressure()
 # finally, write it to the database
 
 # make a database connection
-conxtn = MySQLdb.connect(host = "192.168.1.134",
+conxtn = MySQLdb.connect(host = "[sqldb host ip address]",
 					 user = "[user]",
 					 passwd = "[pwd]",
 					 db = "arduino_data")
