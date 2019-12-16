@@ -27,10 +27,10 @@ single_readings.append(['pi3','BMP085','weather station','pressure',round(out_pr
 # finally, write it to the database
 
 # make a database connection
-conxtn = MySQLdb.connect(host = "[mysql database host]",
-					 user = "[unsername]",
-					 passwd = "[pwd]",
-					 db = "[database name]")
+conxtn = MySQLdb.connect(host = "192.168.1.20",
+					 user = "arduinouser",
+					 passwd = "arduino",
+					 db = "arduino_data")
 
 # create cursor object to execute queries
 cur = conxtn.cursor()
