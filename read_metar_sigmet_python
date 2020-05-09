@@ -1,0 +1,16 @@
+https://www.aviationweather.gov/adds/dataserver_current/current/metars.cache.csv
+
+
+import pandas as pd
+url="https://www.aviationweather.gov/adds/dataserver_current/current/metars.cache.csv"
+df=pd.read_csv(url,skiprows=5)
+#station_ID = 'KPDX'
+station_ID = 'KHIO'
+station_line = df.loc[df['station_id'] == station_ID]
+
+for col in df.columns:
+    print(col)
+
+
+url="https://www.aviationweather.gov/adds/dataserver_current/current/airsigmets.cache.csv"
+df=pd.read_csv(url,skiprows=5)
